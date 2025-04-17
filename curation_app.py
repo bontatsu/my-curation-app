@@ -1,4 +1,4 @@
-# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・ボタン表示修正版)
+# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・ボタン横並び修正版)
 
 import streamlit as st
 import pandas as pd
@@ -569,22 +569,22 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
             st.markdown("---")
-            # ★★★ エラー修正箇所 ★★★
-            button_col1, button_col2, button_col3 = st.columns(3) # コメント解除
-            with button_col1: # いいね (コメント解除)
+            # ★★★ ボタン横並び修正箇所 ★★★
+            button_col1, button_col2, button_col3 = st.columns(3) # カラムは維持
+            with button_col1: # いいね
                 like_icon = "❤️" if is_liked_current else "🤍"
-                # use_container_width を追加
-                if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除", use_container_width=True):
+                # use_container_width=True を削除
+                if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
                     update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
-            with button_col2: # 非表示 (コメント解除)
-                 # use_container_width を追加
-                if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示", use_container_width=True):
+            with button_col2: # 非表示
+                 # use_container_width=True を削除
+                if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
                     update_article_status(article_link, 'hide')
-            with button_col3: # 既読 (コメント解除)
+            with button_col3: # 既読
                 read_icon = "✔️" if is_read_current else "👁️"
                 read_help = "未読にする" if is_read_current else "既読にする"
-                 # use_container_width を追加
-                if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help, use_container_width=True):
+                 # use_container_width=True を削除
+                if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
                     update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
             # ★★★ 修正ここまで ★★★
 
