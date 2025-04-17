@@ -517,7 +517,7 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
         # ★★★ モデル名変更箇所 ★★★
         # 'gemini-2.0-flash-lite' は存在しない可能性あり。確認の上、有効なモデル名に変更してください。
         # 例: 'gemini-1.5-pro', 'gemini-1.0-pro' など
-        model_name = 'gemini-1.5-flash' # ここでモデル名を指定
+        model_name = 'gemini-2.0-flash-lite' # ここでモデル名を指定
         print(f"  - Using Gemini model: {model_name}")
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
