@@ -1,4 +1,4 @@
-# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・レイアウト・アイコン等修正版)
+# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・ボタンレイアウト再修正版)
 
 import streamlit as st
 import pandas as pd
@@ -517,7 +517,9 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
         # ★★★ モデル名変更箇所 ★★★
         # 'gemini-2.0-flash-lite' は存在しない可能性あり。確認の上、有効なモデル名に変更してください。
         # 例: 'gemini-1.5-pro', 'gemini-1.0-pro' など
-        model = genai.GenerativeModel('gemini-1.5-flash') # 現在は 'gemini-1.5-flash' を使用
+        model_name = 'gemini-1.5-flash' # ここでモデル名を指定
+        print(f"  - Using Gemini model: {model_name}")
+        model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
         reason_text = response.text.strip()
         print(f"    -> 推薦理由生成成功。理由: {reason_text[:50]}...")
@@ -568,32 +570,29 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
                     reason = get_recommendation_reason(_article_link=article_link, article_title=title, article_summary=summary, article_keywords_tuple=article_keywords_tuple, interest_keywords_tuple=interest_keywords_tuple)
                 if reason: st.markdown("---"); st.markdown(f"💡 **理由:** {reason}")
 
-        with col_meta: # ソース、キーワード
+        # ★★★ ボタンレイアウト修正箇所 ★★★
+        with col_meta: # ソース、キーワード、ボタンを右カラムに集約
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
-            # --- ボタンは col_meta から移動 ---
-
-        # --- ★★★ ボタンレイアウト修正箇所 ★★★ ---
-        # ボタンを記事情報の下に、コンテナの幅を使って配置
-        st.markdown("---") # 区切り線
-        # gap="small" を指定してカラム間の隙間を詰める
-        button_col1, button_col2, button_col3 = st.columns(3, gap="small")
-        with button_col1: # いいね
-            like_icon = "❤️" if is_liked_current else "🤍"
-            # use_container_width=True は削除
-            if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
-                update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
-        with button_col2: # 非表示
-             # use_container_width=True は削除
-            if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
-                update_article_status(article_link, 'hide')
-        with button_col3: # 既読
-            # ★★★ アイコン変更箇所 ★★★
-            read_icon = "✔️" if is_read_current else "📘" # 👁️ を 📘 に変更
-            read_help = "未読にする" if is_read_current else "既読にする"
-             # use_container_width=True は削除
-            if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
-                update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
+            st.markdown("---")
+            # gap="small" を指定してカラム間の隙間を詰める
+            button_col1, button_col2, button_col3 = st.columns(3, gap="small")
+            with button_col1: # いいね
+                like_icon = "❤️" if is_liked_current else "🤍"
+                # use_container_width=True は削除
+                if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
+                    update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
+            with button_col2: # 非表示
+                 # use_container_width=True は削除
+                if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
+                    update_article_status(article_link, 'hide')
+            with button_col3: # 既読
+                # ★★★ アイコン変更箇所 ★★★
+                read_icon = "✔️" if is_read_current else "📘" # 👁️ を 📘 に変更
+                read_help = "未読にする" if is_read_current else "既読にする"
+                 # use_container_width=True は削除
+                if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
+                    update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
         # ★★★ 修正ここまで ★★★
 
 
