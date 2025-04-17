@@ -1,5 +1,4 @@
 # requirements.txt
-
 streamlit
 pandas
 google-generativeai
@@ -10,5 +9,6 @@ beautifulsoup4
 lxml
 janome
 sumy
-psycopg2-binary # PostgreSQL (Supabase) 接続用
-SQLAlchemy      # st.connection でのDB操作 (text()など) 用
+psycopg2-binary
+SQLAlchemy
+tinysegmenter # ★ これを追加 ★
