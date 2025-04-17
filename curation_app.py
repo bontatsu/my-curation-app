@@ -1,4 +1,4 @@
-# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・ボタン横並び修正版)
+# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・ボタンレイアウト修正版)
 
 import streamlit as st
 import pandas as pd
@@ -565,32 +565,35 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
                     reason = get_recommendation_reason(_article_link=article_link, article_title=title, article_summary=summary, article_keywords_tuple=article_keywords_tuple, interest_keywords_tuple=interest_keywords_tuple)
                 if reason: st.markdown("---"); st.markdown(f"💡 **理由:** {reason}")
 
-        with col_meta: # ソース、キーワード、ボタン
+        with col_meta: # ソース、キーワード
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
-            st.markdown("---")
-            # ★★★ ボタン横並び修正箇所 ★★★
-            button_col1, button_col2, button_col3 = st.columns(3) # カラムは維持
-            with button_col1: # いいね
-                like_icon = "❤️" if is_liked_current else "🤍"
-                # use_container_width=True を削除
-                if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
-                    update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
-            with button_col2: # 非表示
-                 # use_container_width=True を削除
-                if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
-                    update_article_status(article_link, 'hide')
-            with button_col3: # 既読
-                read_icon = "✔️" if is_read_current else "👁️"
-                read_help = "未読にする" if is_read_current else "既読にする"
-                 # use_container_width=True を削除
-                if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
-                    update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
-            # ★★★ 修正ここまで ★★★
+            # --- ボタンは col_meta から移動 ---
+
+        # --- ★★★ ボタンレイアウト修正箇所 ★★★ ---
+        # ボタンを記事情報の下に、コンテナの幅を使って配置
+        st.markdown("---") # 区切り線
+        button_col1, button_col2, button_col3 = st.columns(3) # 3つのカラムを作成
+        with button_col1: # いいね
+            like_icon = "❤️" if is_liked_current else "🤍"
+            # use_container_width=True は削除（狭い画面での縦積みを避けるため）
+            if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
+                update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
+        with button_col2: # 非表示
+             # use_container_width=True は削除
+            if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
+                update_article_status(article_link, 'hide')
+        with button_col3: # 既読
+            read_icon = "✔️" if is_read_current else "📘"
+            read_help = "未読にする" if is_read_current else "既読にする"
+             # use_container_width=True は削除
+            if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
+                update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
+        # ★★★ 修正ここまで ★★★
 
 
 # --- Streamlit アプリケーション 本体 ---
-st.title("📰 Infoboad")
+st.title("📰 Signal Spotter")
 
 # --- 初期化チェック ---
 if not IMPORT_SUCCESS:
@@ -755,7 +758,7 @@ if can_recommend:
             sorted_final_scores = sorted(final_scores.items(), key=lambda item: item[1], reverse=True)
             recommended_links = [link for link, score in sorted_final_scores if score >= RECOMMENDATION_THRESHOLD_SCORE][:RECOMMENDATION_COUNT]
 
-            # --- ★★★ ここから日付フィルター処理 ★★★ ---
+            # --- 日付フィルター処理 ---
             if recommended_links:
                 articles_dict = {article.get('link'): article for article in unread_articles_for_rec if article.get('link')}
 
@@ -794,7 +797,6 @@ if can_recommend:
                         filtered_recommended_links.append(link)
 
                 print(f" -> Filtered recommended links: {len(filtered_recommended_links)}件")
-                # --- ★★★ 日付フィルター処理ここまで ★★★ ---
 
                 # フィルター後のリンクリストを使用
                 recommended_articles_info = [articles_dict.get(link) for link in filtered_recommended_links if articles_dict.get(link)]
