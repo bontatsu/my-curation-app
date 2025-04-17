@@ -569,8 +569,8 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
             st.markdown("---")
-            button_col1, button_col2, button_col3 = st.columns(3)
-            with button_col1: # いいね
+            #button_col1, button_col2, button_col3 = st.columns(3)
+            #with button_col1: # いいね
                 like_icon = "❤️" if is_liked_current else "🤍"
                 if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
                     update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
