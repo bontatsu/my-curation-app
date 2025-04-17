@@ -514,7 +514,7 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
     print(f"  - 推薦理由生成（キャッシュ利用可）... 対象記事: {article_title[:30]}...")
     prompt = f"""ユーザーは以下のキーワードに興味を持っています: {', '.join(interest_keywords)}\n\n以下の記事について、上記のユーザーの興味とどのように関連しているか、推薦する理由を1～2文で具体的に、かつ簡潔に説明してください。\n\n記事タイトル: {article_title}\n記事要約: {article_summary}\n記事キーワード: {', '.join(article_keywords)}\n\n推薦理由："""
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-lite')
         response = model.generate_content(prompt)
         reason_text = response.text.strip()
         print(f"    -> 推薦理由生成成功。理由: {reason_text[:50]}...")
@@ -590,7 +590,7 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
 
 
 # --- Streamlit アプリケーション 本体 ---
-st.title("📰 情報キュレーションダッシュボード")
+st.title("📰 Infoboad")
 
 # --- 初期化チェック ---
 if not IMPORT_SUCCESS:
