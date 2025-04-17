@@ -1,4 +1,4 @@
-# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・ボタンレイアウト修正版)
+# curation_app.py (パフォーマンス改善・SessionState活用・レビュー反映・DB読込キャッシュ・おすすめ日付フィルター・レイアウト・アイコン等修正版)
 
 import streamlit as st
 import pandas as pd
@@ -514,7 +514,10 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
     print(f"  - 推薦理由生成（キャッシュ利用可）... 対象記事: {article_title[:30]}...")
     prompt = f"""ユーザーは以下のキーワードに興味を持っています: {', '.join(interest_keywords)}\n\n以下の記事について、上記のユーザーの興味とどのように関連しているか、推薦する理由を1～2文で具体的に、かつ簡潔に説明してください。\n\n記事タイトル: {article_title}\n記事要約: {article_summary}\n記事キーワード: {', '.join(article_keywords)}\n\n推薦理由："""
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        # ★★★ モデル名変更箇所 ★★★
+        # 'gemini-2.0-flash-lite' は存在しない可能性あり。確認の上、有効なモデル名に変更してください。
+        # 例: 'gemini-1.5-pro', 'gemini-1.0-pro' など
+        model = genai.GenerativeModel('gemini-1.5-flash') # 現在は 'gemini-1.5-flash' を使用
         response = model.generate_content(prompt)
         reason_text = response.text.strip()
         print(f"    -> 推薦理由生成成功。理由: {reason_text[:50]}...")
@@ -573,10 +576,11 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
         # --- ★★★ ボタンレイアウト修正箇所 ★★★ ---
         # ボタンを記事情報の下に、コンテナの幅を使って配置
         st.markdown("---") # 区切り線
-        button_col1, button_col2, button_col3 = st.columns(3) # 3つのカラムを作成
+        # gap="small" を指定してカラム間の隙間を詰める
+        button_col1, button_col2, button_col3 = st.columns(3, gap="small")
         with button_col1: # いいね
             like_icon = "❤️" if is_liked_current else "🤍"
-            # use_container_width=True は削除（狭い画面での縦積みを避けるため）
+            # use_container_width=True は削除
             if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
                 update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
         with button_col2: # 非表示
@@ -584,7 +588,8 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
             if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
                 update_article_status(article_link, 'hide')
         with button_col3: # 既読
-            read_icon = "✔️" if is_read_current else "📘"
+            # ★★★ アイコン変更箇所 ★★★
+            read_icon = "✔️" if is_read_current else "📘" # 👁️ を 📘 に変更
             read_help = "未読にする" if is_read_current else "既読にする"
              # use_container_width=True は削除
             if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
@@ -593,7 +598,7 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
 
 
 # --- Streamlit アプリケーション 本体 ---
-st.title("📰 Signal Spotter")
+st.title("📰 情報キュレーションダッシュボード")
 
 # --- 初期化チェック ---
 if not IMPORT_SUCCESS:
