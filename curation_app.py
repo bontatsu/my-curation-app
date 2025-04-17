@@ -572,15 +572,15 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
             button_col1, button_col2, button_col3 = st.columns(3)
             with button_col1: # いいね
                 like_icon = "❤️" if is_liked_current else "🤍"
-                if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除", use_container_width=True):
+                if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
                     update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
             with button_col2: # 非表示
-                if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示", use_container_width=True):
+                if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
                     update_article_status(article_link, 'hide')
             with button_col3: # 既読
                 read_icon = "✔️" if is_read_current else "👁️"
                 read_help = "未読にする" if is_read_current else "既読にする"
-                if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help, use_container_width=True):
+                if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
                     update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
 
 
@@ -709,7 +709,7 @@ st.markdown("---")
 
 # --- 更新ボタン ---
 if IMPORT_SUCCESS and run_curation_pipeline and db_available:
-    if st.button("🔄 新しい記事をチェック＆DB更新", key="update_button", use_container_width=True):
+    if st.button("🔄 新しい記事をチェック＆DB更新", key="update_button"):
         with st.spinner("新しい記事を取得・処理中です..."):
             try:
                 new_unique_articles = run_curation_pipeline()
