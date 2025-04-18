@@ -35,7 +35,7 @@ print("curation_logic.py を読み込み中...")
 # FEED_MAP = {} # 不要
 
 PROCESSED_URLS_FILE = 'processed_urls.txt'
-SIMILARITY_THRESHOLD = 0.85
+SIMILARITY_THRESHOLD = 0.9
 SUMMARY_MAX_SENTENCES = 3
 SUMMARY_MAX_LENGTH = 100
 NUM_KEYWORDS = 5
