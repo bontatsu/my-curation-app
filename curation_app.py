@@ -482,7 +482,7 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
     if not GEMINI_INITIALIZED or not interest_keywords_tuple: return None
     interest_keywords = list(interest_keywords_tuple); article_keywords = list(article_keywords_tuple)
     print(f"  - 推薦理由生成（キャッシュ利用可）... 対象記事: {article_title[:30]}...")
-    prompt = f"""ユーザーは以下のキーワードに興味を持っています: {', '.join(interest_keywords)}\n\n以下の記事について、興味に関連する記事として、推薦する理由を1～2文でわかりやすく、かつ端的に説明してください。\n\n記事タイトル: {article_title}\n記事要約: {article_summary}\n記事キーワード: {', '.join(article_keywords)}\n\n推薦理由："""
+    prompt = f"""ユーザーは以下のキーワードに興味を持っています: {', '.join(interest_keywords)}\n\n以下の記事について、興味に関連する記事として、推薦する理由を1～2文で具体的に、かつ端的に説明してください。\n\n記事タイトル: {article_title}\n記事要約: {article_summary}\n記事キーワード: {', '.join(article_keywords)}\n\n推薦理由："""
     try:
         model_name = 'gemini-2.0-flash-lite' # ユーザー指定のモデル名に変更
         print(f"  - Using Gemini model: {model_name}")
