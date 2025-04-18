@@ -1,4 +1,4 @@
-# curation_app.py (Signal Spotter - 最終版)
+# curation_app.py (Signal Spotter - 最終版 - 再修正)
 
 import streamlit as st
 import pandas as pd
@@ -35,7 +35,7 @@ get_embedding = None
 IMPORT_SUCCESS = False
 IMPORT_ERROR_MESSAGE = ""
 try:
-    # curation_logic_db (修正版) をインポートするように変更が必要な場合がある
+    # ★★★ curation_logic_db (修正版) をインポートするようにしてください ★★★
     from curation_logic import run_curation_pipeline, get_embedding
     IMPORT_SUCCESS = True
     print("curation_logic.py のインポート成功。")
@@ -47,7 +47,6 @@ except Exception as e_general:
     print(f"!!! Exception during import: {IMPORT_ERROR_MESSAGE} !!!")
 
 # --- Streamlit ページ設定 ---
-# ★★★ タイトル変更 ★★★
 st.set_page_config(page_title="Signal Spotter", layout="wide", page_icon="📰")
 
 # --- ★★★ Session State 初期化 ★★★ ---
@@ -663,7 +662,8 @@ if IMPORT_SUCCESS and run_curation_pipeline and db_available:
                 if not current_feeds:
                      st.warning("収集対象のフィードが登録されていません。サイドバーから追加してください。")
                 else:
-                    new_unique_articles = run_curation_pipeline(feed_list=current_feeds) # ★引数で渡す
+                    # ★★★ run_curation_pipeline 呼び出し修正 ★★★
+                    new_unique_articles = run_curation_pipeline(feed_list=current_feeds) # 引数で渡す
                     if new_unique_articles is not None:
                         if new_unique_articles:
                             print(f"パイプラインから {len(new_unique_articles)} 件の新規記事候補を取得。")
@@ -672,6 +672,10 @@ if IMPORT_SUCCESS and run_curation_pipeline and db_available:
                             else: st.error("記事のDB保存エラー。")
                         else: st.info("新しい記事は見つかりませんでした。")
                     else: st.error("記事の取得・処理エラー。")
+            except TypeError as e_type: # ★★★ TypeError を捕捉 ★★★
+                print(f"!!! TypeError in run_curation_pipeline call: {e_type}")
+                traceback.print_exc()
+                st.error(f"記事更新処理の呼び出しでエラーが発生しました。`curation_logic.py` が `feed_list` 引数を受け取るように修正されているか確認してください。 Error: {e_type}")
             except Exception as e_pipeline: print(f"!!! run_curation_pipeline エラー: {e_pipeline}"); traceback.print_exc(); st.error(f"記事更新パイプライン実行エラー: {e_pipeline}")
 elif not db_available: st.info("DBに接続できないため、記事の更新はできません。")
 else: st.warning("`curation_logic.py` 未検出のため、記事更新機能は利用不可。")
