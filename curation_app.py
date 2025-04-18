@@ -1,4 +1,4 @@
-# curation_app.py (設定DB保存版 - キャッシュTTL削除)
+# curation_app.py (Signal Spotter - 最終版)
 
 import streamlit as st
 import pandas as pd
@@ -26,6 +26,8 @@ SESSION_KEY_INTEREST_KEYWORDS = "user_interest_keywords"
 SESSION_KEY_SEARCH_BOX = "sidebar_search_box"
 SESSION_KEY_SOURCE_FILTER = "sidebar_source_filter_names"
 SESSION_KEY_FORCE_REFRESH = "force_refresh_articles"
+SESSION_KEY_FEED_VERSION = "feed_list_version"
+SESSION_KEY_KEYWORD_VERSION = "keyword_list_version"
 
 # --- curation_logic からインポート ---
 run_curation_pipeline = None
@@ -33,6 +35,7 @@ get_embedding = None
 IMPORT_SUCCESS = False
 IMPORT_ERROR_MESSAGE = ""
 try:
+    # curation_logic_db (修正版) をインポートするように変更が必要な場合がある
     from curation_logic import run_curation_pipeline, get_embedding
     IMPORT_SUCCESS = True
     print("curation_logic.py のインポート成功。")
@@ -44,7 +47,14 @@ except Exception as e_general:
     print(f"!!! Exception during import: {IMPORT_ERROR_MESSAGE} !!!")
 
 # --- Streamlit ページ設定 ---
-st.set_page_config(page_title="情報キュレーション", layout="wide", page_icon="📰")
+# ★★★ タイトル変更 ★★★
+st.set_page_config(page_title="Signal Spotter", layout="wide", page_icon="📰")
+
+# --- ★★★ Session State 初期化 ★★★ ---
+if SESSION_KEY_FEED_VERSION not in st.session_state:
+    st.session_state[SESSION_KEY_FEED_VERSION] = 0
+if SESSION_KEY_KEYWORD_VERSION not in st.session_state:
+    st.session_state[SESSION_KEY_KEYWORD_VERSION] = 0
 
 # --- Geminiクライアント初期化 ---
 GEMINI_INITIALIZED = False
@@ -94,17 +104,17 @@ def init_db(conn_name=DB_CONNECTION_NAME):
         st.error(f"データベース接続中に予期せぬエラーが発生しました: {e}")
         return False
 
-# --- ★★★ 設定情報DBアクセス関数 ★★★ ---
+# --- ★★★ 設定情報DBアクセス関数 (キャッシュ更新方法変更) ★★★ ---
 
 @st.cache_data # DBからの読み込み結果をキャッシュ
-def load_feeds_from_db(conn_name=DB_CONNECTION_NAME):
+def load_feeds_from_db(_version: int, conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _version を追加
     """データベースの feeds テーブルからフィード情報を読み込む"""
-    print(f"キャッシュ確認 or DB ({conn_name}) からフィード情報読み込み...")
+    # _version 引数はキャッシュのキーとして使われるが、関数内では使用しない
+    print(f"キャッシュ確認 or DB ({conn_name}) からフィード情報読み込み... (Version: {_version})")
     feeds = []
     try:
         conn = st.connection(conn_name, type="sql")
-        # ★★★ ttl=3600 を削除 ★★★
-        df = conn.query("SELECT url, name FROM feeds ORDER BY name") # Rely solely on @st.cache_data
+        df = conn.query("SELECT url, name FROM feeds ORDER BY name") # ttl削除済み
         feeds = df.to_dict('records')
         print(f"  - DBから {len(feeds)} 件のフィード情報を読み込み完了。")
     except sqlalchemy_exc.SQLAlchemyError as e:
@@ -117,14 +127,14 @@ def load_feeds_from_db(conn_name=DB_CONNECTION_NAME):
     return feeds
 
 @st.cache_data # DBからの読み込み結果をキャッシュ
-def load_keywords_from_db(conn_name=DB_CONNECTION_NAME):
+def load_keywords_from_db(_version: int, conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _version を追加
     """データベースの interest_keywords テーブルからキーワードを読み込む"""
-    print(f"キャッシュ確認 or DB ({conn_name}) から興味キーワード読み込み...")
+     # _version 引数はキャッシュのキーとして使われるが、関数内では使用しない
+    print(f"キャッシュ確認 or DB ({conn_name}) から興味キーワード読み込み... (Version: {_version})")
     keywords = []
     try:
         conn = st.connection(conn_name, type="sql")
-        # ★★★ ttl=3600 を削除 ★★★
-        df = conn.query("SELECT keyword FROM interest_keywords ORDER BY keyword") # Rely solely on @st.cache_data
+        df = conn.query("SELECT keyword FROM interest_keywords ORDER BY keyword") # ttl削除済み
         keywords = df['keyword'].tolist()
         print(f"  - DBから {len(keywords)} 個の興味キーワードを読み込み完了。")
     except sqlalchemy_exc.SQLAlchemyError as e:
@@ -142,7 +152,6 @@ def add_feed_to_db(name: str, url: str, conn_name=DB_CONNECTION_NAME):
     success = False
     try:
         conn = st.connection(conn_name, type="sql")
-        # ON CONFLICT DO NOTHING で重複URLは無視
         sql = text("INSERT INTO feeds (url, name) VALUES (:url, :name) ON CONFLICT (url) DO NOTHING")
         with conn.session as s:
             result = s.execute(sql, {"url": url, "name": name})
@@ -162,12 +171,9 @@ def add_feed_to_db(name: str, url: str, conn_name=DB_CONNECTION_NAME):
         traceback.print_exc()
 
     if success:
-        # 成功したらフィード読み込みキャッシュをクリア
-        try:
-            load_feeds_from_db.clear()
-            print("  - load_feeds_from_db キャッシュをクリアしました。")
-        except Exception as e_clear:
-            print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
+        # ★★★ 成功したらキャッシュ更新用カウンターをインクリメント ★★★
+        st.session_state[SESSION_KEY_FEED_VERSION] += 1
+        print(f"  - Incremented feed version to: {st.session_state[SESSION_KEY_FEED_VERSION]}")
     return success
 
 def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
@@ -195,12 +201,9 @@ def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
         traceback.print_exc()
 
     if success:
-        # 成功したらフィード読み込みキャッシュをクリア
-        try:
-            load_feeds_from_db.clear()
-            print("  - load_feeds_from_db キャッシュをクリアしました。")
-        except Exception as e_clear:
-            print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
+        # ★★★ 成功したらキャッシュ更新用カウンターをインクリメント ★★★
+        st.session_state[SESSION_KEY_FEED_VERSION] += 1
+        print(f"  - Incremented feed version to: {st.session_state[SESSION_KEY_FEED_VERSION]}")
     return success
 
 def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
@@ -231,14 +234,14 @@ def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
         traceback.print_exc()
 
     if success:
-        # 成功したら関連キャッシュをクリア
+        # ★★★ 成功したら関連キャッシュをクリア (興味ベクトルはクリアが必要) ★★★
+        st.session_state[SESSION_KEY_KEYWORD_VERSION] += 1
+        print(f"  - Incremented keyword version to: {st.session_state[SESSION_KEY_KEYWORD_VERSION]}")
         try:
-            load_keywords_from_db.clear()
-            print("  - load_keywords_from_db キャッシュをクリアしました。")
-            get_interest_vector.clear()
+            get_interest_vector.clear() # 興味ベクトルはキーワードが変わると再計算が必要
             print("  - get_interest_vector キャッシュをクリアしました。")
         except Exception as e_clear:
-            print(f"!!! キーワード関連キャッシュクリア中にエラー: {e_clear} !!!")
+            print(f"!!! 興味ベクトルキャッシュクリア中にエラー: {e_clear} !!!")
     return success
 
 # --- マッピング関数 (変更なし) ---
@@ -258,40 +261,25 @@ def get_feed_map_from_list(feed_data_list):
 def load_all_articles_from_db(conn_name=DB_CONNECTION_NAME, limit=INITIAL_ARTICLE_LOAD_LIMIT):
     """データベースから記事データを読み込み、リスト形式で返す (件数制限付き・キャッシュ対応)"""
     loaded_articles = []
-    # キャッシュされるため、この print はキャッシュがない場合のみ実行される
     print(f"キャッシュ確認 or DB ({conn_name}) から最新 {limit} 件の記事データを読み込みます...")
-    if not init_db(conn_name): # DB接続確認は毎回行う
-        st.error("データベースに接続できないため、記事を読み込めません。")
-        return [] # 空リストを返す
-
+    if not init_db(conn_name): st.error("データベースに接続できないため、記事を読み込めません。"); return []
     try:
-        conn = st.connection(conn_name, type="sql", ttl=0) # connection 自体はキャッシュされない
+        conn = st.connection(conn_name, type="sql", ttl=0)
         query = text("SELECT * FROM articles ORDER BY published_datetime_str DESC LIMIT :limit_val")
-        df = conn.query(str(query), params={"limit_val": limit}, ttl=0) # query実行時のttl=0はキャッシュとは別
+        df = conn.query(str(query), params={"limit_val": limit}, ttl=0)
         print(f"  - DBから {len(df)} 件の記事を取得しました (上限: {limit})。")
         loaded_articles = df.to_dict('records')
-
-        # データ型の変換とデフォルト値の設定
         for article_dict in loaded_articles:
             keywords_data = article_dict.get('keywords_tfidf')
             if isinstance(keywords_data, str):
                 try: article_dict['keywords_tfidf'] = json.loads(keywords_data)
                 except json.JSONDecodeError: article_dict['keywords_tfidf'] = []
             elif keywords_data is None: article_dict['keywords_tfidf'] = []
-
             article_dict['is_hidden'] = bool(article_dict.get('is_hidden', False))
             article_dict['is_liked'] = bool(article_dict.get('is_liked', False))
             article_dict['is_read'] = bool(article_dict.get('is_read', False))
-
-    except sqlalchemy_exc.SQLAlchemyError as e:
-        print(f"!!! SQLAlchemy DBエラー（読み込み）: {e} !!!")
-        st.error(f"データベースからの記事読み込み中にエラーが発生しました: {e}")
-        loaded_articles = []
-    except Exception as e:
-        print(f"!!! 予期せぬエラー（読み込み）: {e} !!!")
-        st.error(f"記事読み込み中に予期せぬエラーが発生しました: {e}")
-        traceback.print_exc()
-        loaded_articles = []
+    except sqlalchemy_exc.SQLAlchemyError as e: print(f"!!! SQLAlchemy DBエラー（読み込み）: {e} !!!"); st.error(f"データベースからの記事読み込み中にエラーが発生しました: {e}"); loaded_articles = []
+    except Exception as e: print(f"!!! 予期せぬエラー（読み込み）: {e} !!!"); st.error(f"記事読み込み中に予期せぬエラーが発生しました: {e}"); traceback.print_exc(); loaded_articles = []
     print(f"データベースからのデータ読み込み・変換完了: {len(loaded_articles)} 件の記事")
     return loaded_articles
 
@@ -327,8 +315,7 @@ def update_article_status(article_link_to_update, action, current_like_status=No
     try:
         conn = st.connection(conn_name, type="sql")
         with conn.session as s:
-            result = s.execute(sql_query, params)
-            s.commit()
+            result = s.execute(sql_query, params); s.commit()
             print(f"  - DB更新試行完了。影響を受けた行数: {result.rowcount}")
             if result.rowcount > 0: db_updated = True
             else: print(f"  - Warn: DB内で更新対象の記事が見つかりませんでした。")
@@ -492,7 +479,7 @@ def calculate_liked_boost_scores(liked_links_list, all_article_embeddings):
     except Exception as e_sim: print(f"  - Error: ブーストスコア類似度計算エラー: {e_sim}"); st.error(f"類似度計算エラー(Boost): {e_sim}"); traceback.print_exc(); return {}
     return boost_scores
 
-# --- Gemini 推薦理由生成関数 (変更なし) ---
+# --- Gemini 推薦理由生成関数 (モデル名変更) ---
 @st.cache_data
 def get_recommendation_reason(_article_link, article_title, article_summary, article_keywords_tuple, interest_keywords_tuple):
     """Gemini API を使用して推薦理由を生成（キャッシュ対応）"""
@@ -501,7 +488,8 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
     print(f"  - 推薦理由生成（キャッシュ利用可）... 対象記事: {article_title[:30]}...")
     prompt = f"""ユーザーは以下のキーワードに興味を持っています: {', '.join(interest_keywords)}\n\n以下の記事について、上記のユーザーの興味とどのように関連しているか、推薦する理由を1～2文で具体的に、かつ簡潔に説明してください。\n\n記事タイトル: {article_title}\n記事要約: {article_summary}\n記事キーワード: {', '.join(article_keywords)}\n\n推薦理由："""
     try:
-        model_name = 'gemini-2.0-flash-lite' # 必要に応じて変更
+        # ★★★ モデル名変更箇所 ★★★
+        model_name = 'gemini-2.0-flash-lite' # ユーザー指定のモデル名に変更
         print(f"  - Using Gemini model: {model_name}")
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
@@ -509,11 +497,12 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
         print(f"    -> 推薦理由生成成功。理由: {reason_text[:50]}...")
         return reason_text
     except Exception as e:
-        print(f"    - Error: Gemini API 推薦理由生成エラー: {e}")
+        print(f"    - Error: Gemini API 推薦理由生成エラー (Model: {model_name}): {e}")
+        st.warning(f"推薦理由の生成に失敗しました (モデル: {model_name})。モデル名が正しいか確認してください。")
         print("\n--- Traceback (Gemini API Error) ---"); traceback.print_exc(); print("--- End Traceback ---")
         return None
 
-# --- 記事表示用関数 (変更なし) ---
+# --- 記事表示用関数 (アイコン変更、ボタンレイアウト修正) ---
 def display_article(article_data, key_prefix, feed_map, show_reason=False, interest_keywords_list=None):
     """記事データを整形して Streamlit コンテナ内に表示する"""
     article_link = article_data.get('link')
@@ -547,13 +536,16 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
             st.markdown("---")
+            # ★★★ ボタン縦積み許容レイアウト ★★★
             like_icon = "❤️" if is_liked_current else "🤍"
             if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除", use_container_width=True): update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
             if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示", use_container_width=True): update_article_status(article_link, 'hide')
-            read_icon = "✔️" if is_read_current else "📘"; read_help = "未読にする" if is_read_current else "既読にする"
+            read_icon = "✔️" if is_read_current else "📘" # ★アイコン変更
+            read_help = "未読にする" if is_read_current else "既読にする"
             if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help, use_container_width=True): update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
 
 # --- Streamlit アプリケーション 本体 ---
+# ★★★ タイトル変更 ★★★
 st.title("📰 Signal Spotter")
 
 # --- 初期化チェック ---
@@ -564,7 +556,7 @@ if not db_available: st.warning("データベースに接続できません。�
 # --- データロード & Session State 管理 ---
 # ★★★ DBからフィード情報をロード ★★★
 loaded_feed_data = []
-if db_available: loaded_feed_data = load_feeds_from_db()
+if db_available: loaded_feed_data = load_feeds_from_db(st.session_state.get(SESSION_KEY_FEED_VERSION, 0)) # ★バージョンを渡す
 feed_map_for_display = get_feed_map_from_list(loaded_feed_data)
 
 # ★★★ DBから記事情報をロード (Session State管理) ★★★
@@ -638,7 +630,7 @@ with st.sidebar:
     st.markdown("---"); st.header("💡 興味キーワード"); st.caption("レコメンデーションに使用。(改行区切り)")
     # ★★★ DBからキーワードをロード (Session State経由) ★★★
     if SESSION_KEY_INTEREST_KEYWORDS not in st.session_state:
-        if db_available: st.session_state[SESSION_KEY_INTEREST_KEYWORDS] = load_keywords_from_db()
+        if db_available: st.session_state[SESSION_KEY_INTEREST_KEYWORDS] = load_keywords_from_db(st.session_state.get(SESSION_KEY_KEYWORD_VERSION, 0)) # ★バージョンを渡す
         else: st.session_state[SESSION_KEY_INTEREST_KEYWORDS] = [] # DBなければ空
 
     with st.form("interest_form", clear_on_submit=False):
@@ -662,18 +654,16 @@ with st.sidebar:
 st.markdown("---")
 
 # --- 更新ボタン ---
-# ★★★ run_curation_pipeline にDBから読み込んだフィードリストを渡す必要があるか要確認 ★★★
-# (もし curation_logic.py が feeds.json を直接読んでいた場合、修正が必要)
 if IMPORT_SUCCESS and run_curation_pipeline and db_available:
     if st.button("🔄 新しい記事をチェック＆DB更新", key="update_button", use_container_width=True):
         with st.spinner("新しい記事を取得・処理中です..."):
             try:
-                # 必要であれば、DBから読み込んだフィード情報を run_curation_pipeline に渡す
-                current_feeds = load_feeds_from_db() # DBから最新のフィードリストを取得
+                # ★★★ DBから読み込んだフィードリストを渡す ★★★
+                current_feeds = load_feeds_from_db(st.session_state.get(SESSION_KEY_FEED_VERSION, 0)) # キャッシュ利用
                 if not current_feeds:
                      st.warning("収集対象のフィードが登録されていません。サイドバーから追加してください。")
                 else:
-                    new_unique_articles = run_curation_pipeline(feed_list=current_feeds) # ★引数で渡すように変更
+                    new_unique_articles = run_curation_pipeline(feed_list=current_feeds) # ★引数で渡す
                     if new_unique_articles is not None:
                         if new_unique_articles:
                             print(f"パイプラインから {len(new_unique_articles)} 件の新規記事候補を取得。")
@@ -786,4 +776,5 @@ elif not articles_data and db_available: st.info("表示可能な記事があり
 else: st.info("表示する記事がありません。")
 
 # --- フッター ---
-st.markdown("---"); st.caption("Curation Dashboard MVP (Settings DB Storage)")
+st.markdown("---"); st.caption("Signal Spotter (Settings DB Storage)")
+
