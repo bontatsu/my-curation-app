@@ -1,4 +1,4 @@
-# curation_app.py (Signal Spotter - ボタン横並び再試行版)
+# curation_app.py (Signal Spotter - ボタンレイアウト元に戻す版)
 
 import streamlit as st
 import pandas as pd
@@ -519,24 +519,20 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
             # --- ボタンはこのカラムの外に移動 ---
 
-        # --- ★★★ ボタンレイアウト修正箇所 (横並び再試行) ★★★
+        # --- ★★★ ボタンレイアウト修正箇所 (ボタンテキスト版) ★★★
         st.markdown("---") # 区切り線
         # gap="small" を指定してカラム間の隙間を詰める
         button_cols = st.columns(3, gap="small")
-        with button_cols[0]: # いいね
-            like_icon = "■" if is_liked_current else "□"
-            # use_container_width=True は削除
-            if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
+        with button_cols[0]: # いいねボタン
+            like_text = "いいね解除" if is_liked_current else "いいね"
+            if st.button(like_text, key=f"{key_prefix}_like_{article_link}", help=like_text):
                 update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
-        with button_cols[1]: # 非表示
-             # use_container_width=True は削除
+        with button_cols[1]: # 非表示ボタン
             if st.button("非表示", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
                 update_article_status(article_link, 'hide')
-        with button_cols[2]: # 既読
-            read_icon = "✔️" if is_read_current else "既読に" # ★アイコン変更
-            read_help = "未読にする" if is_read_current else "既読にする"
-             # use_container_width=True は削除
-            if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
+        with button_cols[2]: # 既読/未読ボタン
+            read_text = "未読にする" if is_read_current else "既読にする"
+            if st.button(read_text, key=f"{key_prefix}_read_{article_link}", help=read_text):
                 update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
         # ★★★ 修正ここまで ★★★
 
