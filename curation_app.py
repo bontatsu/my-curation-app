@@ -1,4 +1,4 @@
-# curation_app.py (Signal Spotter - ボタン横並び最終試行版)
+# curation_app.py (Signal Spotter - ボタン横並び再試行版)
 
 import streamlit as st
 import pandas as pd
@@ -26,8 +26,7 @@ SESSION_KEY_INTEREST_KEYWORDS = "user_interest_keywords"
 SESSION_KEY_SEARCH_BOX = "sidebar_search_box"
 SESSION_KEY_SOURCE_FILTER = "sidebar_source_filter_names"
 SESSION_KEY_FORCE_REFRESH = "force_refresh_articles"
-# SESSION_KEY_FEED_VERSION = "feed_list_version" # キャッシュ削除に伴い不要
-# SESSION_KEY_KEYWORD_VERSION = "keyword_list_version" # キャッシュ削除に伴い不要
+# バージョンカウンターは不要になったため削除
 
 # --- curation_logic からインポート ---
 run_curation_pipeline = None
@@ -515,17 +514,32 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
                     interest_keywords_tuple = tuple(sorted(interest_keywords_list)); article_keywords_tuple = tuple(sorted(kw_list))
                     reason = get_recommendation_reason(_article_link=article_link, article_title=title, article_summary=summary, article_keywords_tuple=article_keywords_tuple, interest_keywords_tuple=interest_keywords_tuple)
                 if reason: st.markdown("---"); st.markdown(f"💡 **理由:** {reason}")
-        with col_meta: # ソース、キーワード、ボタン
+        with col_meta: # ソース、キーワード
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
-            st.markdown("---")
-            # ★★★ ボタン縦積み許容レイアウト ★★★
+            # --- ボタンはこのカラムの外に移動 ---
+
+        # --- ★★★ ボタンレイアウト修正箇所 (横並び再試行) ★★★
+        st.markdown("---") # 区切り線
+        # gap="small" を指定してカラム間の隙間を詰める
+        button_cols = st.columns(3, gap="small")
+        with button_cols[0]: # いいね
             like_icon = "❤️" if is_liked_current else "🤍"
-            if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除", use_container_width=True): update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
-            if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示", use_container_width=True): update_article_status(article_link, 'hide')
+            # use_container_width=True は削除
+            if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
+                update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
+        with button_cols[1]: # 非表示
+             # use_container_width=True は削除
+            if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
+                update_article_status(article_link, 'hide')
+        with button_cols[2]: # 既読
             read_icon = "✔️" if is_read_current else "📘" # ★アイコン変更
             read_help = "未読にする" if is_read_current else "既読にする"
-            if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help, use_container_width=True): update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
+             # use_container_width=True は削除
+            if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
+                update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
+        # ★★★ 修正ここまで ★★★
+
 
 # --- Streamlit アプリケーション 本体 ---
 # ★★★ タイトル変更 ★★★
