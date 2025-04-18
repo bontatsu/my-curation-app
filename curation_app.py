@@ -515,7 +515,7 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
         with col_date: # 日付
             date_disp = "--"
             if date_str:
-                try: dt_obj = pd.to_datetime(date_str.replace(' GMT',''), errors='coerce'); date_disp = dt_obj.strftime('%m/%d') if pd.notna(dt_obj) else "--"
+                try: dt_obj = pd.to_datetime(date_str.replace(' GMT',''), errors='coerce'); date_disp = dt_obj.strftime('%m/%d %H:%M') if pd.notna(dt_obj) else "--"
                 except Exception as e_date: print(f"日付変換エラー: {e_date}")
             st.caption(f"{date_disp}")
         with col_main: # タイトル、要約、理由
