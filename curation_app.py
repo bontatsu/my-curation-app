@@ -1,4 +1,4 @@
-# curation_app.py (Signal Spotter - 最終版 - 再修正)
+# curation_app.py (Signal Spotter - フィード表示デバッグ版)
 
 import streamlit as st
 import pandas as pd
@@ -109,7 +109,7 @@ def init_db(conn_name=DB_CONNECTION_NAME):
 def load_feeds_from_db(_version: int, conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _version を追加
     """データベースの feeds テーブルからフィード情報を読み込む"""
     # _version 引数はキャッシュのキーとして使われるが、関数内では使用しない
-    print(f"キャッシュ確認 or DB ({conn_name}) からフィード情報読み込み... (Version: {_version})")
+    print(f"*** load_feeds_from_db CALLED with version: {_version} ***") # ★デバッグプリント追加
     feeds = []
     try:
         conn = st.connection(conn_name, type="sql")
@@ -129,7 +129,7 @@ def load_feeds_from_db(_version: int, conn_name=DB_CONNECTION_NAME): # ★ダミ
 def load_keywords_from_db(_version: int, conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _version を追加
     """データベースの interest_keywords テーブルからキーワードを読み込む"""
      # _version 引数はキャッシュのキーとして使われるが、関数内では使用しない
-    print(f"キャッシュ確認 or DB ({conn_name}) から興味キーワード読み込み... (Version: {_version})")
+    print(f"*** load_keywords_from_db CALLED with version: {_version} ***") # ★デバッグプリント追加
     keywords = []
     try:
         conn = st.connection(conn_name, type="sql")
@@ -172,7 +172,7 @@ def add_feed_to_db(name: str, url: str, conn_name=DB_CONNECTION_NAME):
     if success:
         # ★★★ 成功したらキャッシュ更新用カウンターをインクリメント ★★★
         st.session_state[SESSION_KEY_FEED_VERSION] += 1
-        print(f"  - Incremented feed version to: {st.session_state[SESSION_KEY_FEED_VERSION]}")
+        print(f"*** Incremented feed version to: {st.session_state[SESSION_KEY_FEED_VERSION]} ***") # ★デバッグプリント追加
     return success
 
 def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
@@ -202,7 +202,7 @@ def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
     if success:
         # ★★★ 成功したらキャッシュ更新用カウンターをインクリメント ★★★
         st.session_state[SESSION_KEY_FEED_VERSION] += 1
-        print(f"  - Incremented feed version to: {st.session_state[SESSION_KEY_FEED_VERSION]}")
+        print(f"*** Incremented feed version to: {st.session_state[SESSION_KEY_FEED_VERSION]} ***") # ★デバッグプリント追加
     return success
 
 def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
@@ -235,7 +235,7 @@ def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
     if success:
         # ★★★ 成功したら関連キャッシュをクリア (興味ベクトルはクリアが必要) ★★★
         st.session_state[SESSION_KEY_KEYWORD_VERSION] += 1
-        print(f"  - Incremented keyword version to: {st.session_state[SESSION_KEY_KEYWORD_VERSION]}")
+        print(f"*** Incremented keyword version to: {st.session_state[SESSION_KEY_KEYWORD_VERSION]} ***") # ★デバッグプリント追加
         try:
             get_interest_vector.clear() # 興味ベクトルはキーワードが変わると再計算が必要
             print("  - get_interest_vector キャッシュをクリアしました。")
@@ -487,7 +487,6 @@ def get_recommendation_reason(_article_link, article_title, article_summary, art
     print(f"  - 推薦理由生成（キャッシュ利用可）... 対象記事: {article_title[:30]}...")
     prompt = f"""ユーザーは以下のキーワードに興味を持っています: {', '.join(interest_keywords)}\n\n以下の記事について、上記のユーザーの興味とどのように関連しているか、推薦する理由を1～2文で具体的に、かつ簡潔に説明してください。\n\n記事タイトル: {article_title}\n記事要約: {article_summary}\n記事キーワード: {', '.join(article_keywords)}\n\n推薦理由："""
     try:
-        # ★★★ モデル名変更箇所 ★★★
         model_name = 'gemini-2.0-flash-lite' # ユーザー指定のモデル名に変更
         print(f"  - Using Gemini model: {model_name}")
         model = genai.GenerativeModel(model_name)
@@ -554,6 +553,7 @@ if not db_available: st.warning("データベースに接続できません。�
 
 # --- データロード & Session State 管理 ---
 # ★★★ DBからフィード情報をロード ★★★
+print(f"--- Calling load_feeds_from_db with version: {st.session_state.get(SESSION_KEY_FEED_VERSION, 0)} ---") # ★デバッグプリント追加
 loaded_feed_data = []
 if db_available: loaded_feed_data = load_feeds_from_db(st.session_state.get(SESSION_KEY_FEED_VERSION, 0)) # ★バージョンを渡す
 feed_map_for_display = get_feed_map_from_list(loaded_feed_data)
