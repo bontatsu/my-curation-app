@@ -524,16 +524,16 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
         # gap="small" を指定してカラム間の隙間を詰める
         button_cols = st.columns(3, gap="small")
         with button_cols[0]: # いいね
-            like_icon = "❤️" if is_liked_current else "🤍"
+            like_icon = "■" if is_liked_current else "□"
             # use_container_width=True は削除
             if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除"):
                 update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
         with button_cols[1]: # 非表示
              # use_container_width=True は削除
-            if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
+            if st.button("非表示", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
                 update_article_status(article_link, 'hide')
         with button_cols[2]: # 既読
-            read_icon = "✔️" if is_read_current else "📘" # ★アイコン変更
+            read_icon = "✔️" if is_read_current else "既読に" # ★アイコン変更
             read_help = "未読にする" if is_read_current else "既読にする"
              # use_container_width=True は削除
             if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help):
