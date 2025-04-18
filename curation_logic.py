@@ -1,5 +1,4 @@
-# curation_logic.py (公開日時補完版)
-# curation_logic.py の冒頭に追加
+# curation_logic.py (DB対応版)
 import streamlit as st # Secrets 読み込みのため
 import google.generativeai as genai
 # 他の既存の import 文 ...
@@ -15,29 +14,25 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sumy.parsers.plaintext import PlaintextParser
 from sumy.nlp.tokenizers import Tokenizer as SumyTokenizer
 from sumy.summarizers.lex_rank import LexRankSummarizer
+# from sumy.summarizers.text_rank import TextRankSummarizer # 必要ならコメント解除
+# from sumy.summarizers.lsa import LsaSummarizer # 必要ならコメント解除
 from sumy.nlp.stemmers import Stemmer
 import string
 from bs4 import BeautifulSoup
+# ★★★ DBからフィード情報を取得するために追加 ★★★
+# (curation_app.py と同じ接続名を使う想定)
+from sqlalchemy import text, exc as sqlalchemy_exc
+DB_CONNECTION_NAME = "supabase_db"
+# ★★★ ここまで追加 ★★★
 
 
 print("curation_logic.py を読み込み中...")
 
 # --- 設定値 ---
-FEED_CONFIG_FILE = 'feeds.json'
-FEED_INFO = []
-FEED_URLS = []
-FEED_MAP = {}
-if os.path.exists(FEED_CONFIG_FILE):
-    try:
-        with open(FEED_CONFIG_FILE, 'r', encoding='utf-8') as f: FEED_INFO = json.load(f)
-        if isinstance(FEED_INFO, list):
-            FEED_URLS = [item.get('url') for item in FEED_INFO if item.get('url')]
-            FEED_MAP = {item.get('url'): item.get('name', item.get('url')) for item in FEED_INFO if item.get('url')}
-            print(f"  - {FEED_CONFIG_FILE} から {len(FEED_URLS)} 件のフィード情報を読み込みました。")
-        else: print(f"  - 警告: {FEED_CONFIG_FILE} の形式が不正です。"); FEED_INFO = []
-    except Exception as e: print(f"  - Error: {FEED_CONFIG_FILE} の読み込みエラー: {e}"); FEED_INFO = []
-else: print(f"  - 警告: フィード設定ファイル '{FEED_CONFIG_FILE}' が見つかりません。")
-if not FEED_URLS: print("  - 警告: 処理対象のフィードURLがありません。")
+# FEED_CONFIG_FILE = 'feeds.json' # 不要になったためコメントアウト or 削除
+# FEED_INFO = [] # 不要
+# FEED_URLS = [] # 不要
+# FEED_MAP = {} # 不要
 
 PROCESSED_URLS_FILE = 'processed_urls.txt'
 SIMILARITY_THRESHOLD = 0.85
@@ -48,13 +43,9 @@ LANGUAGE = "japanese"
 STOP_WORDS_JA = {'する', 'いる', 'なる', 'ある', 'できる', 'ない', '良い', 'いう', '思う', 'もの', 'こと', 'ため', 'さん', 'よう', 'みたい', 'こちら'}
 STOP_WORDS_EN = { 'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'being', 'been', 'to', 'of', 'and', 'in', 'on', 'at', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'from', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now', 'll', 're', 've', 'it', 'i', 'you', 'he', 'she', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'this', 'that', 'these', 'those', 'am', 'has', 'have', 'had', 'having', 'do', 'does', 'did', 'doing', 'github', 'google' }
 
-# curation_logic.py の設定値定義の後などに追加
-
 # --- Geminiクライアント初期化 (logic側でも行う) ---
 GEMINI_LOGIC_INITIALIZED = False
 try:
-    # StreamlitのSecrets機能を使ってAPIキーを読み込む
-    # secrets.toml が存在し、キーが設定されている必要がある
     if "GEMINI_API_KEY" in st.secrets:
          api_key = st.secrets["GEMINI_API_KEY"]
          genai.configure(api_key=api_key)
@@ -65,11 +56,7 @@ try:
 except FileNotFoundError:
      print("!!! (Logic) Secrets Warning: secrets.toml ファイルが見つかりません。 !!!")
 except AttributeError:
-     # st.secrets が Streamlitサーバープロセス外（例: 直接実行時）で使えない場合
      print("!!! (Logic) Warning: st.secrets が利用できません (Streamlit環境外？)。環境変数など他の方法でAPIキーを読み込む必要があります。 !!!")
-     # ここで環境変数から読み込む代替処理などを追加しても良い
-     # api_key = os.environ.get("GEMINI_API_KEY")
-     # if api_key: genai.configure(api_key=api_key); GEMINI_LOGIC_INITIALIZED = True ...
 except Exception as e:
     print(f"!!! (Logic) Geminiクライアント初期化エラー: {e} !!!")
 
@@ -104,14 +91,19 @@ def save_processed_urls(filepath, urls_set): # ... (変更なし) ...
     except Exception as e: print(f"  - 処理済みURLファイルの保存中にエラー: {e}")
 
 
-# ★★★ fetch_new_articles 関数を修正 ★★★
-def fetch_new_articles(feed_urls, processed_urls):
+# ★★★ fetch_new_articles 関数 (変更なし、引数 feed_urls を受け取る) ★★★
+def fetch_new_articles(feed_urls: list, processed_urls: set):
     """RSSフィードから新しい記事情報を収集し、日時がない場合は取得日時で補完する"""
     print("  - 新しい記事の収集を開始します...")
     newly_added_articles = []
     current_processed_urls = processed_urls.copy()
 
+    if not feed_urls:
+        print("    - 収集対象のフィードURLがありません。")
+        return newly_added_articles, current_processed_urls
+
     for feed_url in feed_urls:
+        if not feed_url: continue # URLが空ならスキップ
         print(f"    - フィードをチェック中: {feed_url[:80]}...")
         try:
             feed = feedparser.parse(feed_url)
@@ -123,32 +115,25 @@ def fetch_new_articles(feed_urls, processed_urls):
                 if not article_link: continue
 
                 if article_link not in current_processed_urls:
-                    # 記事発見時の取得日時を記録
                     fetch_time_gmt_entry = time.gmtime()
                     fetch_datetime_str_entry = time.strftime('%Y-%m-%d %H:%M:%S GMT', fetch_time_gmt_entry)
                     print(f"      - New article found: {article_link} (Fetched at: {fetch_datetime_str_entry})")
 
-                    # 元の公開日時を取得・変換
                     published_time_struct = getattr(entry, 'published_parsed', None)
                     published_datetime_str = None
                     if published_time_struct:
                         try: published_datetime_str = time.strftime('%Y-%m-%d %H:%M:%S GMT', published_time_struct)
                         except Exception as e_time: print(f"        - 警告: 日時変換エラー: {e_time}")
 
-                    # 公開日時がNoneなら取得日時で補完
-                    final_published_datetime_str = published_datetime_str
-                    if final_published_datetime_str is None:
-                        print("        - Published date is None. Using fetch date instead.")
-                        final_published_datetime_str = fetch_datetime_str_entry
+                    final_published_datetime_str = published_datetime_str if published_datetime_str else fetch_datetime_str_entry
+                    if published_datetime_str is None: print("        - Published date is None. Using fetch date instead.")
 
-                    # title と summary の処理
                     raw_title = getattr(entry, 'title', 'タイトルなし'); raw_summary = getattr(entry, 'summary', '')
                     clean_title = remove_html_tags_bs4(raw_title); clean_summary = remove_html_tags_bs4(raw_summary)
 
-                    # article_info 辞書作成 (補完後の日時を使用)
                     article_info = {
                         'title': clean_title, 'link': article_link,
-                        'published_datetime_str': final_published_datetime_str, # 補完後の日時
+                        'published_datetime_str': final_published_datetime_str,
                         'summary': clean_summary, 'source_feed': feed_url, 'id': getattr(entry, 'id', article_link)
                     }
                     newly_added_articles.append(article_info)
@@ -156,7 +141,6 @@ def fetch_new_articles(feed_urls, processed_urls):
         except Exception as e: print(f"      フィード取得中に予期せぬエラー ({feed_url}): {e}")
     print(f"  - 収集完了。今回新たに追加された記事: {len(newly_added_articles)} 件")
     return newly_added_articles, current_processed_urls
-# ★★★ fetch_new_articles 関数ここまで ★★★
 
 
 def tokenize_and_filter(text): # ... (変更なし) ...
@@ -231,8 +215,8 @@ def summarize_text_with_sumy(text, sentences_count=3, algorithm='lexrank'): # ..
     try:
         parser = PlaintextParser.from_string(text, SumyTokenizer(LANGUAGE)); stemmer = Stemmer(LANGUAGE)
         if algorithm == 'lexrank': summarizer = LexRankSummarizer(stemmer)
-        elif algorithm == 'textrank': summarizer = TextRankSummarizer(stemmer)
-        elif algorithm == 'lsa': summarizer = LsaSummarizer(stemmer)
+        # elif algorithm == 'textrank': summarizer = TextRankSummarizer(stemmer) # 必要ならコメント解除
+        # elif algorithm == 'lsa': summarizer = LsaSummarizer(stemmer) # 必要ならコメント解除
         else: summarizer = LexRankSummarizer(stemmer)
         summary_sentences_tuples = summarizer(parser.document, sentences_count)
         summary_sentences = [str(sentence) for sentence in summary_sentences_tuples]
@@ -264,53 +248,42 @@ def extract_keywords_for_articles(vectorizer, tfidf_matrix, target_indices, num_
     print(f"    - キーワード抽出完了 ({extracted_count} 件の記事でキーワードを抽出)。")
     return keywords_dict
 
-# curation_logic.py に追加
-
-# --- 3-9. Embedding API 呼び出し関数 ---
+# --- Embedding API 呼び出し関数 (変更なし) ---
 def get_embedding(text_or_texts, task_type="RETRIEVAL_DOCUMENT"):
     """
     与えられたテキストまたはテキストリストからGemini Embeddingを取得する。
     失敗した場合は None を返す。
-
-    Args:
-        text_or_texts (str or list[str]): ベクトル化したいテキスト、またはそのリスト。
-        task_type (str): Embeddingのタスクタイプ。検索対象文書なら "RETRIEVAL_DOCUMENT",
-                         検索クエリなら "RETRIEVAL_QUERY", 分類なら "CLASSIFICATION" など。
-
-    Returns:
-        list[float] or list[list[float]] or None: Embeddingベクトル、またはそのリスト。エラー時はNone。
     """
-    global GEMINI_LOGIC_INITIALIZED, EMBEDDING_MODEL_NAME # 初期化状態とモデル名を参照
-
-    if not GEMINI_LOGIC_INITIALIZED:
-        print("    - Error: Gemini クライアントが初期化されていないため、Embeddingを取得できません。")
-        return None
-    if not text_or_texts: # 入力が空の場合
-         return None
-
+    global GEMINI_LOGIC_INITIALIZED, EMBEDDING_MODEL_NAME
+    if not GEMINI_LOGIC_INITIALIZED: print("    - Error: Gemini クライアント未初期化"); return None
+    if not text_or_texts: return None
     try:
-        # content にテキストまたはリストをそのまま渡せる
-        result = genai.embed_content(
-            model=EMBEDDING_MODEL_NAME,
-            content=text_or_texts,
-            task_type=task_type
-        )
-        # result['embedding'] にベクトル(リスト)またはベクトルのリストが入っている
+        result = genai.embed_content(model=EMBEDDING_MODEL_NAME, content=text_or_texts, task_type=task_type)
         return result['embedding']
-    except Exception as e:
-        print(f"    - Error: Gemini Embedding API呼び出し中にエラーが発生しました: {e}")
-        # エラーの詳細を知りたい場合は traceback を使う
-        # import traceback
-        # print(traceback.format_exc())
-        return None
+    except Exception as e: print(f"    - Error: Gemini Embedding API呼び出しエラー: {e}"); return None
 
-# --- メイン処理パイプライン関数 ---
-def run_curation_pipeline(): # ★★★ この関数内で fetch_new_articles が呼ばれる ★★★
-    global FEED_URLS # logicファイル内で生成された FEED_URLS を使う
+# --- メイン処理パイプライン関数 (引数追加) ---
+# ★★★ 引数 feed_list を追加 ★★★
+def run_curation_pipeline(feed_list: list):
+    # global FEED_URLS # 不要になったため削除
     print("\n=== 情報キュレーションパイプライン開始 ===")
     start_time = time.time()
+
+    # ★★★ 引数 feed_list から URL リストを生成 ★★★
+    feed_urls_to_process = []
+    if isinstance(feed_list, list):
+        feed_urls_to_process = [item.get('url') for item in feed_list if item.get('url')]
+    if not feed_urls_to_process:
+        print("  - 処理対象のフィードURLがありません。パイプラインを終了します。")
+        return []
+    print(f"  - 処理対象フィードURL数: {len(feed_urls_to_process)}")
+    # ★★★ ここまで変更 ★★★
+
     processed_urls = load_processed_urls(PROCESSED_URLS_FILE)
-    newly_added_articles, updated_processed_urls = fetch_new_articles(FEED_URLS, processed_urls) # ★ 修正済みの関数呼び出し ★
+    # ★★★ 生成した feed_urls_to_process を fetch_new_articles に渡す ★★★
+    newly_added_articles, updated_processed_urls = fetch_new_articles(feed_urls_to_process, processed_urls)
+
+    # --- 以降の処理は変更なし ---
     if not newly_added_articles:
         print("新しい記事はありませんでした。"); save_processed_urls(PROCESSED_URLS_FILE, updated_processed_urls)
         print(f"パイプライン完了 ({(time.time() - start_time):.2f}秒)"); return []
@@ -356,37 +329,41 @@ def run_curation_pipeline(): # ★★★ この関数内で fetch_new_articles �
 # --- メイン処理の実行 (直接実行用) ---
 if __name__ == '__main__':
     print("\n--- curation_logic.py を直接実行テスト ---")
-    if FEED_MAP: results = run_curation_pipeline(); print(f"\n--- 実行結果 ({len(results)} 件のユニーク記事) ---")
-    else: print("FEED_MAPが空のため、テスト実行をスキップしました。feeds.jsonを確認してください。")
-    print("\n--- 直接実行テスト完了 ---")
-# curation_logic.py の if __name__ == '__main__': ブロック内に追加
+    # ★★★ 直接実行テストではDBからフィードを取得する必要がある ★★★
+    test_feeds = []
+    try:
+        # このテスト実行が Streamlit 環境外で行われる場合、st.connection は使えない可能性がある
+        # 代替として、直接 DB に接続するか、テスト用の固定リストを使うなどの工夫が必要
+        # ここでは、st.connection が使える前提で試みる (Streamlit コンテキスト内で実行される場合)
+        print("  - テスト用にDBからフィードリストを取得します...")
+        conn = st.connection(DB_CONNECTION_NAME, type="sql")
+        df_feeds = conn.query("SELECT url, name FROM feeds ORDER BY name")
+        test_feeds = df_feeds.to_dict('records')
+        print(f"    - {len(test_feeds)} 件のフィードを取得しました。")
+    except Exception as e_test_db:
+        print(f"  - Error: テスト実行時のDBからのフィード取得に失敗: {e_test_db}")
+        print("  - テスト実行をスキップします。")
+
+    if test_feeds:
+        results = run_curation_pipeline(feed_list=test_feeds) # ★引数を渡す
+        print(f"\n--- 実行結果 ({len(results)} 件のユニーク記事) ---")
+    else:
+        print("  - 処理対象のフィードがないため、テスト実行をスキップしました。")
 
     # --- Embedding関数のテスト ---
     print("\n--- Embedding Function Test ---")
     test_text_1 = "これは最初のテスト文章です。"
     test_text_2 = "これは二番目の文章、少し違います。"
     test_texts = [test_text_1, test_text_2]
-
-    # 単一テキストのテスト
     print(f"Testing single text: '{test_text_1}'")
     embedding1 = get_embedding(test_text_1)
-    if embedding1:
-        print(f"  -> Got embedding vector of dimension: {len(embedding1)}")
-        # print(f"  -> Vector (first 5 dims): {embedding1[:5]}") # ベクトルの中身（一部）
-    else:
-        print("  -> Failed to get embedding.")
-
-    # テキストリストのテスト
+    if embedding1: print(f"  -> Got embedding vector of dimension: {len(embedding1)}")
+    else: print("  -> Failed to get embedding.")
     print(f"\nTesting text list: {test_texts}")
     embeddings_list = get_embedding(test_texts)
-    if embeddings_list and isinstance(embeddings_list, list) and len(embeddings_list) == len(test_texts):
-        print(f"  -> Got {len(embeddings_list)} embedding vectors.")
-        print(f"  -> Dimension of first vector: {len(embeddings_list[0])}")
-        # print(f"  -> First vector (first 5 dims): {embeddings_list[0][:5]}")
-    else:
-        print("  -> Failed to get embeddings for the list.")
+    if embeddings_list and isinstance(embeddings_list, list) and len(embeddings_list) == len(test_texts): print(f"  -> Got {len(embeddings_list)} embedding vectors. Dim: {len(embeddings_list[0])}")
+    else: print("  -> Failed to get embeddings for the list.")
     print("--- Embedding Function Test End ---")
 
-else: # FEED_MAP が空の場合
-     print("FEED_MAPが空のため、テスト実行をスキップしました。feeds.jsonを確認してください。")
-print("\n--- 直接実行テスト完了 ---")
+    print("\n--- 直接実行テスト完了 ---")
+
