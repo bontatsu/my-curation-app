@@ -1,4 +1,4 @@
-# curation_app.py (Signal Spotter - ボタンレイアウト元に戻す版)
+# curation_app.py (Signal Spotter - 設定読込キャッシュ削除版)
 
 import streamlit as st
 import pandas as pd
@@ -101,8 +101,8 @@ def init_db(conn_name=DB_CONNECTION_NAME):
 
 # --- ★★★ 設定情報DBアクセス関数 (キャッシュ削除) ★★★ ---
 
-# @st.cache_data # キャッシュ削除済み
-def load_feeds_from_db(conn_name=DB_CONNECTION_NAME): # 引数削除済み
+# @st.cache_data # ★ キャッシュを削除
+def load_feeds_from_db(conn_name=DB_CONNECTION_NAME): # ★ 引数削除
     """データベースの feeds テーブルからフィード情報を読み込む (キャッシュなし)"""
     print(f"DB ({conn_name}) からフィード情報読み込み...") # キャッシュしないので毎回実行される
     feeds = []
@@ -120,8 +120,8 @@ def load_feeds_from_db(conn_name=DB_CONNECTION_NAME): # 引数削除済み
         traceback.print_exc()
     return feeds
 
-# @st.cache_data # キャッシュ削除済み
-def load_keywords_from_db(conn_name=DB_CONNECTION_NAME): # 引数削除済み
+# @st.cache_data # ★ キャッシュを削除
+def load_keywords_from_db(conn_name=DB_CONNECTION_NAME): # ★ 引数削除
     """データベースの interest_keywords テーブルからキーワードを読み込む (キャッシュなし)"""
     print(f"DB ({conn_name}) から興味キーワード読み込み...") # キャッシュしないので毎回実行される
     keywords = []
@@ -162,7 +162,13 @@ def add_feed_to_db(name: str, url: str, conn_name=DB_CONNECTION_NAME):
         print(f"!!! 予期せぬエラー（フィード追加）: {e} !!!")
         st.error(f"フィード追加中に予期せぬエラーが発生しました: {e}")
         traceback.print_exc()
-    # キャッシュクリアは不要
+
+    # if success: # キャッシュクリアは不要
+    #     try:
+    #         load_feeds_from_db.clear()
+    #         print("  - load_feeds_from_db キャッシュをクリアしました。")
+    #     except Exception as e_clear:
+    #         print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
     return success
 
 def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
@@ -188,7 +194,13 @@ def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
         print(f"!!! 予期せぬエラー（フィード削除）: {e} !!!")
         st.error(f"フィード削除中に予期せぬエラーが発生しました: {e}")
         traceback.print_exc()
-    # キャッシュクリアは不要
+
+    # if success: # キャッシュクリアは不要
+    #     try:
+    #         load_feeds_from_db.clear()
+    #         print("  - load_feeds_from_db キャッシュをクリアしました。")
+    #     except Exception as e_clear:
+    #         print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
     return success
 
 def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
@@ -220,8 +232,9 @@ def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
 
     if success:
         # ★★★ 興味ベクトルキャッシュのクリアのみ行う ★★★
+        # load_keywords_from_db.clear() # 不要
         try:
-            get_interest_vector.clear()
+            get_interest_vector.clear() # 興味ベクトルはキーワードが変わると再計算が必要
             print("  - get_interest_vector キャッシュをクリアしました。")
         except Exception as e_clear:
             print(f"!!! 興味ベクトルキャッシュクリア中にエラー: {e_clear} !!!")
@@ -514,28 +527,17 @@ def display_article(article_data, key_prefix, feed_map, show_reason=False, inter
                     interest_keywords_tuple = tuple(sorted(interest_keywords_list)); article_keywords_tuple = tuple(sorted(kw_list))
                     reason = get_recommendation_reason(_article_link=article_link, article_title=title, article_summary=summary, article_keywords_tuple=article_keywords_tuple, interest_keywords_tuple=interest_keywords_tuple)
                 if reason: st.markdown("---"); st.markdown(f"💡 **理由:** {reason}")
-        with col_meta: # ソース、キーワード
+        with col_meta: # ソース、キーワード、ボタン
             if source_name: st.caption(f"{source_name}")
             if kw_list: kw_tags = [f"`{k}`" for k in kw_list]; st.markdown(f"<small>{' '.join(kw_tags)}</small>", unsafe_allow_html=True)
-            # --- ボタンはこのカラムの外に移動 ---
-
-        # --- ★★★ ボタンレイアウト修正箇所 (ボタンテキスト版) ★★★
-        st.markdown("---") # 区切り線
-        # gap="small" を指定してカラム間の隙間を詰める
-        button_cols = st.columns(3, gap="small")
-        with button_cols[0]: # いいねボタン
-            like_text = "いいね解除" if is_liked_current else "いいね"
-            if st.button(like_text, key=f"{key_prefix}_like_{article_link}", help=like_text):
-                update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
-        with button_cols[1]: # 非表示ボタン
-            if st.button("非表示", key=f"{key_prefix}_hide_{article_link}", help="非表示"):
-                update_article_status(article_link, 'hide')
-        with button_cols[2]: # 既読/未読ボタン
-            read_text = "未読にする" if is_read_current else "既読にする"
-            if st.button(read_text, key=f"{key_prefix}_read_{article_link}", help=read_text):
-                update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
-        # ★★★ 修正ここまで ★★★
-
+            st.markdown("---")
+            # ★★★ ボタン縦積み許容レイアウト ★★★
+            like_icon = "❤️" if is_liked_current else "🤍"
+            if st.button(f"{like_icon}", key=f"{key_prefix}_like_{article_link}", help="いいね/解除", use_container_width=True): update_article_status(article_link, 'toggle_like', current_like_status=is_liked_current)
+            if st.button("🗑️", key=f"{key_prefix}_hide_{article_link}", help="非表示", use_container_width=True): update_article_status(article_link, 'hide')
+            read_icon = "✔️" if is_read_current else "📘" # ★アイコン変更
+            read_help = "未読にする" if is_read_current else "既読にする"
+            if st.button(read_icon, key=f"{key_prefix}_read_{article_link}", help=read_help, use_container_width=True): update_article_status(article_link, 'toggle_read', current_read_status=is_read_current)
 
 # --- Streamlit アプリケーション 本体 ---
 # ★★★ タイトル変更 ★★★
@@ -547,9 +549,9 @@ db_available = init_db(DB_CONNECTION_NAME)
 if not db_available: st.warning("データベースに接続できません。記事関連機能は利用できません。")
 
 # --- データロード & Session State 管理 ---
-# ★★★ DBからフィード情報をロード (キャッシュなし) ★★★
+# ★★★ DBからフィード情報をロード ★★★
 loaded_feed_data = []
-if db_available: loaded_feed_data = load_feeds_from_db() # ★引数削除
+if db_available: loaded_feed_data = load_feeds_from_db() # ★キャッシュ削除に伴い引数削除
 feed_map_for_display = get_feed_map_from_list(loaded_feed_data)
 
 # ★★★ DBから記事情報をロード (Session State管理) ★★★
@@ -774,5 +776,5 @@ elif not articles_data and db_available: st.info("表示可能な記事があり
 else: st.info("表示する記事がありません。")
 
 # --- フッター ---
-st.markdown("---"); st.caption("Signal Spotter (Settings DB Storage - No Settings Cache)")
+st.markdown("---"); st.caption("Signal Spotter (Settings DB Storage)")
 
