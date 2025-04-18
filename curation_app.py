@@ -1,4 +1,4 @@
-# curation_app.py (Signal Spotter - キャッシュクリア修正版)
+# curation_app.py (Signal Spotter - 設定読込キャッシュ削除版)
 
 import streamlit as st
 import pandas as pd
@@ -26,8 +26,7 @@ SESSION_KEY_INTEREST_KEYWORDS = "user_interest_keywords"
 SESSION_KEY_SEARCH_BOX = "sidebar_search_box"
 SESSION_KEY_SOURCE_FILTER = "sidebar_source_filter_names"
 SESSION_KEY_FORCE_REFRESH = "force_refresh_articles"
-# SESSION_KEY_FEED_VERSION = "feed_list_version" # 不要になったため削除
-# SESSION_KEY_KEYWORD_VERSION = "keyword_list_version" # 不要になったため削除
+# バージョンカウンターは不要になったため削除
 
 # --- curation_logic からインポート ---
 run_curation_pipeline = None
@@ -50,10 +49,7 @@ except Exception as e_general:
 st.set_page_config(page_title="Signal Spotter", layout="wide", page_icon="📰")
 
 # --- Session State 初期化 (バージョンカウンター削除) ---
-# if SESSION_KEY_FEED_VERSION not in st.session_state:
-#     st.session_state[SESSION_KEY_FEED_VERSION] = 0
-# if SESSION_KEY_KEYWORD_VERSION not in st.session_state:
-#     st.session_state[SESSION_KEY_KEYWORD_VERSION] = 0
+# バージョンカウンターの初期化は不要
 
 # --- Geminiクライアント初期化 ---
 GEMINI_INITIALIZED = False
@@ -103,12 +99,12 @@ def init_db(conn_name=DB_CONNECTION_NAME):
         st.error(f"データベース接続中に予期せぬエラーが発生しました: {e}")
         return False
 
-# --- ★★★ 設定情報DBアクセス関数 (キャッシュクリア方法変更) ★★★ ---
+# --- ★★★ 設定情報DBアクセス関数 (キャッシュ削除) ★★★ ---
 
-@st.cache_data # DBからの読み込み結果をキャッシュ
-def load_feeds_from_db(conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _version を削除
-    """データベースの feeds テーブルからフィード情報を読み込む"""
-    print(f"キャッシュ確認 or DB ({conn_name}) からフィード情報読み込み...")
+# @st.cache_data # ★ キャッシュを削除
+def load_feeds_from_db(conn_name=DB_CONNECTION_NAME): # ★ 引数削除
+    """データベースの feeds テーブルからフィード情報を読み込む (キャッシュなし)"""
+    print(f"DB ({conn_name}) からフィード情報読み込み...") # キャッシュしないので毎回実行される
     feeds = []
     try:
         conn = st.connection(conn_name, type="sql")
@@ -124,10 +120,10 @@ def load_feeds_from_db(conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _vers
         traceback.print_exc()
     return feeds
 
-@st.cache_data # DBからの読み込み結果をキャッシュ
-def load_keywords_from_db(conn_name=DB_CONNECTION_NAME): # ★ダミー引数 _version を削除
-    """データベースの interest_keywords テーブルからキーワードを読み込む"""
-    print(f"キャッシュ確認 or DB ({conn_name}) から興味キーワード読み込み...")
+# @st.cache_data # ★ キャッシュを削除
+def load_keywords_from_db(conn_name=DB_CONNECTION_NAME): # ★ 引数削除
+    """データベースの interest_keywords テーブルからキーワードを読み込む (キャッシュなし)"""
+    print(f"DB ({conn_name}) から興味キーワード読み込み...") # キャッシュしないので毎回実行される
     keywords = []
     try:
         conn = st.connection(conn_name, type="sql")
@@ -167,13 +163,12 @@ def add_feed_to_db(name: str, url: str, conn_name=DB_CONNECTION_NAME):
         st.error(f"フィード追加中に予期せぬエラーが発生しました: {e}")
         traceback.print_exc()
 
-    if success:
-        # ★★★ 成功したらキャッシュを .clear() でクリア ★★★
-        try:
-            load_feeds_from_db.clear()
-            print("  - load_feeds_from_db キャッシュをクリアしました。")
-        except Exception as e_clear:
-            print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
+    # if success: # キャッシュクリアは不要
+    #     try:
+    #         load_feeds_from_db.clear()
+    #         print("  - load_feeds_from_db キャッシュをクリアしました。")
+    #     except Exception as e_clear:
+    #         print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
     return success
 
 def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
@@ -200,13 +195,12 @@ def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
         st.error(f"フィード削除中に予期せぬエラーが発生しました: {e}")
         traceback.print_exc()
 
-    if success:
-        # ★★★ 成功したらキャッシュを .clear() でクリア ★★★
-        try:
-            load_feeds_from_db.clear()
-            print("  - load_feeds_from_db キャッシュをクリアしました。")
-        except Exception as e_clear:
-            print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
+    # if success: # キャッシュクリアは不要
+    #     try:
+    #         load_feeds_from_db.clear()
+    #         print("  - load_feeds_from_db キャッシュをクリアしました。")
+    #     except Exception as e_clear:
+    #         print(f"!!! フィードキャッシュクリア中にエラー: {e_clear} !!!")
     return success
 
 def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
@@ -237,14 +231,13 @@ def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
         traceback.print_exc()
 
     if success:
-        # ★★★ 成功したら関連キャッシュをクリア ★★★
+        # ★★★ 興味ベクトルキャッシュのクリアのみ行う ★★★
+        # load_keywords_from_db.clear() # 不要
         try:
-            load_keywords_from_db.clear() # キーワード読み込みキャッシュをクリア
-            print("  - load_keywords_from_db キャッシュをクリアしました。")
-            get_interest_vector.clear() # 興味ベクトルキャッシュもクリア
+            get_interest_vector.clear() # 興味ベクトルはキーワードが変わると再計算が必要
             print("  - get_interest_vector キャッシュをクリアしました。")
         except Exception as e_clear:
-            print(f"!!! キーワード関連キャッシュクリア中にエラー: {e_clear} !!!")
+            print(f"!!! 興味ベクトルキャッシュクリア中にエラー: {e_clear} !!!")
     return success
 
 # --- マッピング関数 (変更なし) ---
@@ -260,7 +253,7 @@ def get_feed_map_from_list(feed_data_list):
     return feed_map
 
 # --- 記事データ読み込み関数 (変更なし) ---
-@st.cache_data # DB読み込み結果をキャッシュする
+@st.cache_data # 記事データは重いのでキャッシュする
 def load_all_articles_from_db(conn_name=DB_CONNECTION_NAME, limit=INITIAL_ARTICLE_LOAD_LIMIT):
     """データベースから記事データを読み込み、リスト形式で返す (件数制限付き・キャッシュ対応)"""
     loaded_articles = []
@@ -557,9 +550,8 @@ if not db_available: st.warning("データベースに接続できません。�
 
 # --- データロード & Session State 管理 ---
 # ★★★ DBからフィード情報をロード ★★★
-print(f"--- Calling load_feeds_from_db ---") # ★デバッグプリント変更
 loaded_feed_data = []
-if db_available: loaded_feed_data = load_feeds_from_db() # ★バージョン引数削除
+if db_available: loaded_feed_data = load_feeds_from_db() # ★キャッシュ削除に伴い引数削除
 feed_map_for_display = get_feed_map_from_list(loaded_feed_data)
 
 # ★★★ DBから記事情報をロード (Session State管理) ★★★
@@ -633,7 +625,7 @@ with st.sidebar:
     st.markdown("---"); st.header("💡 興味キーワード"); st.caption("レコメンデーションに使用。(改行区切り)")
     # ★★★ DBからキーワードをロード (Session State経由) ★★★
     if SESSION_KEY_INTEREST_KEYWORDS not in st.session_state:
-        if db_available: st.session_state[SESSION_KEY_INTEREST_KEYWORDS] = load_keywords_from_db() # ★バージョン引数削除
+        if db_available: st.session_state[SESSION_KEY_INTEREST_KEYWORDS] = load_keywords_from_db() # ★引数削除
         else: st.session_state[SESSION_KEY_INTEREST_KEYWORDS] = [] # DBなければ空
 
     with st.form("interest_form", clear_on_submit=False):
@@ -662,7 +654,7 @@ if IMPORT_SUCCESS and run_curation_pipeline and db_available:
         with st.spinner("新しい記事を取得・処理中です..."):
             try:
                 # ★★★ DBから読み込んだフィードリストを渡す ★★★
-                current_feeds = load_feeds_from_db() # ★バージョン引数削除
+                current_feeds = load_feeds_from_db() # ★引数削除
                 if not current_feeds:
                      st.warning("収集対象のフィードが登録されていません。サイドバーから追加してください。")
                 else:
