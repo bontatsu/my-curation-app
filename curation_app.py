@@ -1,4 +1,4 @@
-# curation_app.py (設定DB保存版)
+# curation_app.py (設定DB保存版 - キャッシュTTL削除)
 
 import streamlit as st
 import pandas as pd
@@ -15,8 +15,6 @@ from sqlalchemy import text, exc as sqlalchemy_exc
 
 # --- 定数定義 ---
 DB_CONNECTION_NAME = "supabase_db" # secrets.toml の接続名
-# FEED_CONFIG_FILE = 'feeds.json' # 不要になったため削除
-# INTEREST_KEYWORDS_FILE = "interest_keywords.txt" # 不要になったため削除
 RECOMMENDATION_BOOST_WEIGHT = 0.5
 RECOMMENDATION_COUNT = 5
 RECOMMENDATION_THRESHOLD_SCORE = 0.4
@@ -105,8 +103,8 @@ def load_feeds_from_db(conn_name=DB_CONNECTION_NAME):
     feeds = []
     try:
         conn = st.connection(conn_name, type="sql")
-        # ORDER BY name で名前順に取得
-        df = conn.query("SELECT url, name FROM feeds ORDER BY name", ttl=3600) # 1時間キャッシュ
+        # ★★★ ttl=3600 を削除 ★★★
+        df = conn.query("SELECT url, name FROM feeds ORDER BY name") # Rely solely on @st.cache_data
         feeds = df.to_dict('records')
         print(f"  - DBから {len(feeds)} 件のフィード情報を読み込み完了。")
     except sqlalchemy_exc.SQLAlchemyError as e:
@@ -125,7 +123,8 @@ def load_keywords_from_db(conn_name=DB_CONNECTION_NAME):
     keywords = []
     try:
         conn = st.connection(conn_name, type="sql")
-        df = conn.query("SELECT keyword FROM interest_keywords ORDER BY keyword", ttl=3600) # 1時間キャッシュ
+        # ★★★ ttl=3600 を削除 ★★★
+        df = conn.query("SELECT keyword FROM interest_keywords ORDER BY keyword") # Rely solely on @st.cache_data
         keywords = df['keyword'].tolist()
         print(f"  - DBから {len(keywords)} 個の興味キーワードを読み込み完了。")
     except sqlalchemy_exc.SQLAlchemyError as e:
@@ -153,7 +152,6 @@ def add_feed_to_db(name: str, url: str, conn_name=DB_CONNECTION_NAME):
                 success = True
             else:
                 print("  - フィードは既に存在するため、追加されませんでした。")
-                # 既に存在する場合もUI的には成功として扱って良いか検討 (ここでは成功扱い)
                 success = True # 既存でもエラーではない
     except sqlalchemy_exc.SQLAlchemyError as e:
         print(f"!!! SQLAlchemy DBエラー（フィード追加）: {e} !!!")
@@ -187,7 +185,7 @@ def delete_feed_from_db(url: str, conn_name=DB_CONNECTION_NAME):
                 success = True
             else:
                 print("  - Warn: 削除対象のフィードが見つかりませんでした。")
-                success = False # 対象がない場合は失敗扱いとするか？ (UIで選択しているので通常は見つかるはず)
+                success = False
     except sqlalchemy_exc.SQLAlchemyError as e:
         print(f"!!! SQLAlchemy DBエラー（フィード削除）: {e} !!!")
         st.error(f"フィードの削除中にデータベースエラーが発生しました: {e}")
@@ -242,9 +240,6 @@ def save_keywords_to_db(keywords_list: list, conn_name=DB_CONNECTION_NAME):
         except Exception as e_clear:
             print(f"!!! キーワード関連キャッシュクリア中にエラー: {e_clear} !!!")
     return success
-
-# --- ★★★ ファイルI/O関数は削除 ★★★ ---
-# load_feed_config, save_feed_config, load_interest_keywords, save_interest_keywords は削除
 
 # --- マッピング関数 (変更なし) ---
 def get_feed_map_from_list(feed_data_list):
@@ -674,17 +669,19 @@ if IMPORT_SUCCESS and run_curation_pipeline and db_available:
         with st.spinner("新しい記事を取得・処理中です..."):
             try:
                 # 必要であれば、DBから読み込んだフィード情報を run_curation_pipeline に渡す
-                # current_feeds = load_feeds_from_db()
-                # new_unique_articles = run_curation_pipeline(feed_list=current_feeds)
-                new_unique_articles = run_curation_pipeline() # 現状維持 (引数なし)
-                if new_unique_articles is not None:
-                    if new_unique_articles:
-                        print(f"パイプラインから {len(new_unique_articles)} 件の新規記事候補を取得。")
-                        inserted_count = insert_articles_to_db(new_unique_articles, DB_CONNECTION_NAME)
-                        if inserted_count >= 0: st.success(f"更新処理完了。DBに {inserted_count} 件追加(or無視)。表示更新。"); time.sleep(1); st.rerun()
-                        else: st.error("記事のDB保存エラー。")
-                    else: st.info("新しい記事は見つかりませんでした。")
-                else: st.error("記事の取得・処理エラー。")
+                current_feeds = load_feeds_from_db() # DBから最新のフィードリストを取得
+                if not current_feeds:
+                     st.warning("収集対象のフィードが登録されていません。サイドバーから追加してください。")
+                else:
+                    new_unique_articles = run_curation_pipeline(feed_list=current_feeds) # ★引数で渡すように変更
+                    if new_unique_articles is not None:
+                        if new_unique_articles:
+                            print(f"パイプラインから {len(new_unique_articles)} 件の新規記事候補を取得。")
+                            inserted_count = insert_articles_to_db(new_unique_articles, DB_CONNECTION_NAME)
+                            if inserted_count >= 0: st.success(f"更新処理完了。DBに {inserted_count} 件追加(or無視)。表示更新。"); time.sleep(1); st.rerun()
+                            else: st.error("記事のDB保存エラー。")
+                        else: st.info("新しい記事は見つかりませんでした。")
+                    else: st.error("記事の取得・処理エラー。")
             except Exception as e_pipeline: print(f"!!! run_curation_pipeline エラー: {e_pipeline}"); traceback.print_exc(); st.error(f"記事更新パイプライン実行エラー: {e_pipeline}")
 elif not db_available: st.info("DBに接続できないため、記事の更新はできません。")
 else: st.warning("`curation_logic.py` 未検出のため、記事更新機能は利用不可。")
@@ -782,7 +779,7 @@ if filtered_articles:
     except Exception as e_sort: print(f"!!! 日付ソート中にエラー: {e_sort}"); st.warning("記事の日付ソート中にエラーが発生しました。元の順序で表示します。"); sorted_articles = filtered_articles
 
     for article_data in sorted_articles: # ソート済みリストを表示
-        display_article(article_data, key_prefix="all", feed_map=feed_map_for_display, show_reason=False) # 全記事一覧では理由は表示しない
+        display_article(article_data, key_prefix="all", feed_map=feed_map_for_display, show_reason=False)
 
 elif visible_articles_list: st.info("指定された検索・絞り込み条件に一致する記事は見つかりませんでした。")
 elif not articles_data and db_available: st.info("表示可能な記事がありません。「新しい記事をチェック＆DB更新」ボタンで記事を取得してください。")
